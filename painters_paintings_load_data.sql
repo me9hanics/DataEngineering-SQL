@@ -1,7 +1,9 @@
 -- C:\GitHubRepo\ArtProject\PainterPalette\datasets
 drop schema IF EXISTS painterpalette;
-create schema IF NOT EXISTS painterpalette;
+create schema painterpalette;
 USE painterpalette;
+
+-- Naming conventions: Tables with first letter capital, columns with camelCase
 
 -- Load painters (from the PainterPalette project)
 DROP TABLE IF EXISTS Artist;
@@ -53,14 +55,14 @@ IGNORE 1 LINES
 birthYear, deathYear, firstYear, lastYear, wikiartPicturesCount, locations, locationsWithYears, stylesExtended, stylesCount,
 stylesYears, occupations, paintingsExhibitedAt, paintingsExhibitedAtCount, paintingSchool, influencedBy, influencedOn,
 pupils, teachers, friendsAndCoworkers, contemporary, artMovement, occupationType)
-SET death_year = CASE WHEN death_year = '' THEN NULL ELSE death_year END,
-    birth_year = CASE WHEN birth_year = '' THEN NULL ELSE birth_year END,
-    FirstYear = CASE WHEN FirstYear = '' THEN NULL ELSE FirstYear END,
-    LastYear = CASE WHEN LastYear = '' THEN NULL ELSE LastYear END,
-    wikiart_pictures_count = CASE WHEN wikiart_pictures_count = '' THEN NULL ELSE wikiart_pictures_count END;
+SET deathYear = CASE WHEN deathYear = '' THEN NULL ELSE deathYear END,
+    birthYear = CASE WHEN birthYear = '' THEN NULL ELSE birthYear END,
+    firstYear = CASE WHEN firstYear = '' THEN NULL ELSE firstYear END,
+    lastYear = CASE WHEN lastYear = '' THEN NULL ELSE lastYear END,
+    wikiartPicturesCount = CASE WHEN wikiartPicturesCount = '' THEN NULL ELSE wikiartPicturesCount END;
     
--- Set auto increment, from the last index    
-SET @max_id = (SELECT MAX(id) FROM Artist);
+-- Set auto increment after loading, from the last index    
+SET @max_id = (SELECT MAX(artistId) FROM Artist);
 -- Appearantly, DDL (Data Definition Language) statements like ALTER TABLE, not even inside a stored procedure, so had to do the following
 
 SET @sql = CONCAT('ALTER TABLE Artist AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
@@ -126,11 +128,54 @@ LINES TERMINATED BY '\n'
 IGNORE 1 LINES
 (paintingId, authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers);
 
+SET @max_id = (SELECT MAX(paintingId) FROM PaintingArt500k);
+SET @sql = CONCAT('ALTER TABLE PaintingArt500k AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 SELECT COUNT(paintingId) FROM PaintingArt500k;
 
+-- Join paintings: WikiArt and Art500k
 
--- Add foreign keys
-ALTER TABLE PaintingWikiart
-ADD FOREIGN KEY (artistName) REFERENCES Artist(artistName); -- Rather ID
+CREATE TABLE IF NOT EXISTS CombinedPaintings (
+  paintingId INT AUTO_INCREMENT PRIMARY KEY,
+  artistName VARCHAR(255),
+  style VARCHAR(255),
+  genre VARCHAR(255),
+  movement VARCHAR(255),
+  tags TEXT,
+  authorName VARCHAR(255),
+  nationality VARCHAR(255),
+  paintingSchool VARCHAR(255),
+  artMovement VARCHAR(255),
+  dateYear VARCHAR(255),
+  influencedBy VARCHAR(255),
+  influencedOn VARCHAR(255),
+  tag VARCHAR(255),
+  pupils VARCHAR(255),
+  locations VARCHAR(255),
+  teachers VARCHAR(255),
+  friendsAndCoworkers VARCHAR(255),
+  artist_artistId INT NOT NULL,
+  INDEX fk_combinedpaintings_artist_idx (artist_artistId ASC) VISIBLE,
+  CONSTRAINT fk_combinedpaintings_artist
+    FOREIGN KEY (artist_artistId)
+    REFERENCES painterpalette.artist (artistId)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION
+);
 
--- Need to add ID foreign key, and add the values based on the artistName (can be null maybe)
+-- To not insert IDs (those might overlap between the two datasets), we just use auto increment
+INSERT INTO CombinedPaintings (artistName, style, genre, movement, tags)
+SELECT artistName, style, genre, movement, tags
+FROM PaintingWikiart;
+INSERT INTO CombinedPaintings (authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers)
+SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers
+FROM PaintingArt500k;
+-- Add the ID values based on the artistName (can be null possibly)
+
+
+-- Add institutions? Also Painter Schools?
+
+select * from combinedpaintings;
