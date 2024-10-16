@@ -145,37 +145,38 @@ CREATE TABLE IF NOT EXISTS CombinedPaintings (
   genre VARCHAR(255),
   movement VARCHAR(255),
   tags TEXT,
-  authorName VARCHAR(255),
   nationality VARCHAR(255),
   paintingSchool VARCHAR(255),
-  artMovement VARCHAR(255),
+  -- artMovement VARCHAR(255),
   dateYear VARCHAR(255),
   influencedBy VARCHAR(255),
   influencedOn VARCHAR(255),
-  tag VARCHAR(255),
+  -- tag VARCHAR(255),
   pupils VARCHAR(255),
   locations VARCHAR(255),
   teachers VARCHAR(255),
   friendsAndCoworkers VARCHAR(255),
-  artist_artistId INT NOT NULL,
+  artist_artistId INT NULL DEFAULT NULL,
   INDEX fk_combinedpaintings_artist_idx (artist_artistId ASC) VISIBLE,
   CONSTRAINT fk_combinedpaintings_artist
     FOREIGN KEY (artist_artistId)
     REFERENCES painterpalette.artist (artistId)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
+    ON UPDATE NO ACTION -- partially generated using MySQL Workbench
 );
 
 -- To not insert IDs (those might overlap between the two datasets), we just use auto increment
 INSERT INTO CombinedPaintings (artistName, style, genre, movement, tags)
 SELECT artistName, style, genre, movement, tags
 FROM PaintingWikiart;
-INSERT INTO CombinedPaintings (authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers)
+INSERT INTO CombinedPaintings (artistName, genre, style, nationality, paintingSchool, movement, dateYear, influencedBy, influencedOn, tags, pupils, locations, teachers, friendsAndCoworkers)
 SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers
 FROM PaintingArt500k;
 -- Add the ID values based on the artistName (can be null possibly)
+-- UPDATE CombinedPaintings
+-- SET artist_artistId = (SELECT artistId FROM Artist WHERE Artist.artistName = CombinedPaintings.artistName);
 
+SELECT * FROM CombinedPaintings;
+-- SELECT * FROM CombinedPaintings ORDER BY paintingId DESC;
 
 -- Add institutions? Also Painter Schools?
-
-select * from combinedpaintings;
