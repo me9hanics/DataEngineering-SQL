@@ -42,6 +42,7 @@ CREATE TABLE Artist (
   occupationType            VARCHAR(255)
   -- foreign keys?
 );
+CREATE INDEX idx_artist_artistName ON Artist (artistName);
 
 -- LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_dollar_separator.csv'
 LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_indexed.csv'
@@ -140,7 +141,7 @@ SELECT COUNT(paintingId) FROM PaintingArt500k;
 
 CREATE TABLE IF NOT EXISTS CombinedPaintings (
   paintingId INT AUTO_INCREMENT PRIMARY KEY,
-  artistName VARCHAR(255),
+  artistName VARCHAR(255), -- Index on artist name?
   style VARCHAR(255),
   genre VARCHAR(255),
   movement VARCHAR(255),
@@ -164,6 +165,7 @@ CREATE TABLE IF NOT EXISTS CombinedPaintings (
     ON DELETE NO ACTION
     ON UPDATE NO ACTION -- partially generated using MySQL Workbench
 );
+CREATE INDEX idx_combinedpaintings_artistName ON CombinedPaintings (artistName);
 
 -- To not insert IDs (those might overlap between the two datasets), we just use auto increment
 INSERT INTO CombinedPaintings (artistName, style, genre, movement, tags)
@@ -172,11 +174,32 @@ FROM PaintingWikiart;
 INSERT INTO CombinedPaintings (artistName, genre, style, nationality, paintingSchool, movement, dateYear, influencedBy, influencedOn, tags, pupils, locations, teachers, friendsAndCoworkers)
 SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers
 FROM PaintingArt500k;
+
+-- Drop basis tables for memory
+DROP TABLE paintingart500k;
+DROP TABLE paintingwikiart;
+
+-- Remove duplicates
+WITH DuplicateArtists AS (
+  SELECT MIN(artistId) as artistIdToKeep
+  FROM Artist
+  GROUP BY artistName
+)
+DELETE FROM Artist
+WHERE artistId NOT IN (SELECT artistIdToKeep FROM DuplicateArtists);
+
+-- Here, it is important that no artists appear twice, else joins will have multiple pairs for one artist.
+-- This can be checked via comparing the two results:
+-- SELECT count(*) FROM CombinedPaintings;
+-- SELECT count(*) FROM CombinedPaintings cp LEFT JOIN painterpalette.artist a ON cp.artistName = a.artistName;
+
 -- Add the ID values based on the artistName (can be null possibly)
--- UPDATE CombinedPaintings
--- SET artist_artistId = (SELECT artistId FROM Artist WHERE Artist.artistName = CombinedPaintings.artistName);
+UPDATE CombinedPaintings cp
+JOIN Artist a ON cp.artistName = a.artistName
+SET cp.artist_artistId = a.artistId;
 
 SELECT * FROM CombinedPaintings;
--- SELECT * FROM CombinedPaintings ORDER BY paintingId DESC;
+-- TODO
+-- Add institutions, with Painter Schools as table
+-- Movements (painter), styles (painting) as tables - fill with data e.g. dates
 
--- Add institutions? Also Painter Schools?
