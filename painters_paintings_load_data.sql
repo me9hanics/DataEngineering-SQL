@@ -6,8 +6,8 @@ USE painterpalette;
 -- Naming conventions: Tables with first letter capital, columns with camelCase
 
 -- Load painters (from the PainterPalette project)
-DROP TABLE IF EXISTS Artist;
-CREATE TABLE Artist (
+DROP TABLE IF EXISTS Artists;
+CREATE TABLE Artists (
   artistId                  INT NOT NULL PRIMARY KEY,
   artistName                VARCHAR(255),
   nationality               VARCHAR(255),
@@ -42,11 +42,11 @@ CREATE TABLE Artist (
   occupationType            VARCHAR(255)
   -- foreign keys?
 );
-CREATE INDEX idx_artist_artistName ON Artist (artistName);
+CREATE INDEX idx_artist_artistName ON Artists (artistName);
 
 -- LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_dollar_separator.csv'
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_indexed.csv'
-INTO TABLE Artist
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_indexed_new.csv'
+INTO TABLE Artists
 -- FIELDS TERMINATED BY '$'
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
@@ -63,20 +63,20 @@ SET deathYear = CASE WHEN deathYear = '' THEN NULL ELSE deathYear END,
     wikiartPicturesCount = CASE WHEN wikiartPicturesCount = '' THEN NULL ELSE wikiartPicturesCount END;
     
 -- Set auto increment after loading, from the last index    
-SET @max_id = (SELECT MAX(artistId) FROM Artist);
+SET @max_id = (SELECT MAX(artistId) FROM Artists);
 -- Appearantly, DDL (Data Definition Language) statements like ALTER TABLE, not even inside a stored procedure, so had to do the following
 
-SET @sql = CONCAT('ALTER TABLE Artist AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
+SET @sql = CONCAT('ALTER TABLE Artists AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- Check the table
-select * from Artist;
+select * from Artists;
 
 
 -- Load WikiArt paintings dataset
-CREATE TABLE IF NOT EXISTS PaintingWikiart (
+CREATE TABLE IF NOT EXISTS WikiartPaintings (
   paintingId INT NOT NULL PRIMARY KEY,
   artistName VARCHAR(255),
   style VARCHAR(255),
@@ -86,24 +86,24 @@ CREATE TABLE IF NOT EXISTS PaintingWikiart (
 );
 
 LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_wikiart_indexed.csv'
-INTO TABLE PaintingWikiart
+INTO TABLE WikiartPaintings
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES
 (paintingId, artistName, style, genre, movement, tags);
 
-SET @max_id = (SELECT MAX(paintingId) FROM PaintingWikiart);
-SET @sql = CONCAT('ALTER TABLE PaintingWikiart AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
+SET @max_id = (SELECT MAX(paintingId) FROM WikiartPaintings);
+SET @sql = CONCAT('ALTER TABLE WikiartPaintings AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SELECT * FROM PaintingWikiart;
+SELECT * FROM WikiartPaintings;
 
 -- Load Art500k paintings dataset
 
-CREATE TABLE IF NOT EXISTS PaintingArt500k (
+CREATE TABLE IF NOT EXISTS Art500kPaintings (
   paintingId INT NOT NULL PRIMARY KEY,
   authorName VARCHAR(255),
   genre VARCHAR(255),
@@ -122,24 +122,24 @@ CREATE TABLE IF NOT EXISTS PaintingArt500k (
 );
 
 LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_art500k_indexed.csv'
-INTO TABLE PaintingArt500k
+INTO TABLE Art500kPaintings
 FIELDS TERMINATED BY ','
 OPTIONALLY ENCLOSED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES
 (paintingId, authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers);
 
-SET @max_id = (SELECT MAX(paintingId) FROM PaintingArt500k);
-SET @sql = CONCAT('ALTER TABLE PaintingArt500k AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
+SET @max_id = (SELECT MAX(paintingId) FROM Art500kPaintings);
+SET @sql = CONCAT('ALTER TABLE Art500kPaintings AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SELECT COUNT(paintingId) FROM PaintingArt500k;
+SELECT COUNT(paintingId) FROM Art500kPaintings;
 
 -- Join paintings: WikiArt and Art500k
 
-CREATE TABLE IF NOT EXISTS CombinedPaintings (
+CREATE TABLE IF NOT EXISTS Paintings (
   paintingId INT AUTO_INCREMENT PRIMARY KEY,
   artistName VARCHAR(255), -- Index on artist name?
   style VARCHAR(255),
@@ -161,45 +161,113 @@ CREATE TABLE IF NOT EXISTS CombinedPaintings (
   INDEX fk_combinedpaintings_artist_idx (artist_artistId ASC) VISIBLE,
   CONSTRAINT fk_combinedpaintings_artist
     FOREIGN KEY (artist_artistId)
-    REFERENCES painterpalette.artist (artistId)
+    REFERENCES painterpalette.Artists (artistId)
     ON DELETE NO ACTION
     ON UPDATE NO ACTION -- partially generated using MySQL Workbench
 );
-CREATE INDEX idx_combinedpaintings_artistName ON CombinedPaintings (artistName);
+CREATE INDEX idx_combinedpaintings_artistName ON Paintings (artistName);
 
 -- To not insert IDs (those might overlap between the two datasets), we just use auto increment
-INSERT INTO CombinedPaintings (artistName, style, genre, movement, tags)
+INSERT INTO Paintings (artistName, style, genre, movement, tags)
 SELECT artistName, style, genre, movement, tags
-FROM PaintingWikiart;
-INSERT INTO CombinedPaintings (artistName, genre, style, nationality, paintingSchool, movement, dateYear, influencedBy, influencedOn, tags, pupils, locations, teachers, friendsAndCoworkers)
+FROM WikiartPaintings;
+INSERT INTO Paintings (artistName, genre, style, nationality, paintingSchool, movement, dateYear, influencedBy, influencedOn, tags, pupils, locations, teachers, friendsAndCoworkers)
 SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers
-FROM PaintingArt500k;
+FROM Art500kPaintings;
 
--- Drop basis tables for memory
-DROP TABLE paintingart500k;
-DROP TABLE paintingwikiart;
+-- Drop basis tables for memory (might not be good to drop)
+DROP TABLE Art500kPaintings;
+DROP TABLE WikiartPaintings;
 
 -- Remove duplicates
 WITH DuplicateArtists AS (
   SELECT MIN(artistId) as artistIdToKeep
-  FROM Artist
+  FROM Artists
   GROUP BY artistName
 )
-DELETE FROM Artist
+DELETE FROM Artists
 WHERE artistId NOT IN (SELECT artistIdToKeep FROM DuplicateArtists);
 
 -- Here, it is important that no artists appear twice, else joins will have multiple pairs for one artist.
 -- This can be checked via comparing the two results:
--- SELECT count(*) FROM CombinedPaintings;
--- SELECT count(*) FROM CombinedPaintings cp LEFT JOIN painterpalette.artist a ON cp.artistName = a.artistName;
+-- SELECT count(*) FROM Paintings;
+-- SELECT count(*) FROM Paintings cp LEFT JOIN painterpalette.Artists a ON cp.artistName = a.artistName;
+-- Or SELECT artistname FROM Artists group by artistname having count(artistname)>1;
 
 -- Add the ID values based on the artistName (can be null possibly)
-UPDATE CombinedPaintings cp
-JOIN Artist a ON cp.artistName = a.artistName
+UPDATE Paintings cp
+JOIN Artists a ON cp.artistName = a.artistName
 SET cp.artist_artistId = a.artistId;
 
-SELECT * FROM CombinedPaintings;
--- TODO
--- Add institutions, with Painter Schools as table
--- Movements (painter), styles (painting) as tables - fill with data e.g. dates
+SELECT * FROM Paintings;
+SELECT * FROM Artists;
 
+-- Movements
+CREATE TABLE Movements (
+    movementId INT AUTO_INCREMENT PRIMARY KEY,
+    movementName VARCHAR(255) -- UNIQUE
+);
+
+-- Add foreign key
+ALTER TABLE Artists -- should move this into the Artists table creation
+ADD movementId INT;
+ALTER TABLE Artists
+ADD CONSTRAINT fk_movementId FOREIGN KEY (movementId) REFERENCES Movements(movementId);
+
+-- Styles
+CREATE TABLE Styles (
+    styleId INT AUTO_INCREMENT PRIMARY KEY,
+    styleName VARCHAR(255) -- UNIQUE
+    -- e.g. date ranges: min-max,
+    -- most common country (nationality)
+);
+
+-- Add foreign key
+ALTER TABLE Paintings
+ADD styleId INT;
+ALTER TABLE Paintings -- will have to index 
+ADD CONSTRAINT fk_styleId FOREIGN KEY (styleId) REFERENCES Styles(styleId);
+
+-- Institutions
+CREATE TABLE Institutions (
+    institutionId INT AUTO_INCREMENT PRIMARY KEY,
+    institutionName TEXT -- UNIQUE
+    -- location
+);
+
+-- N:M relationship inbetween table (e.g. like in class)
+CREATE TABLE ArtistInstitutions (
+    artistId INT,
+    institutionId INT,
+    PRIMARY KEY (artistId, institutionId),
+    FOREIGN KEY (artistId) REFERENCES Artists(artistId),
+    FOREIGN KEY (institutionId) REFERENCES Institutions(institutionId)
+);
+
+-- TODO add the data for the movements, styles, institutions
+
+
+-- TODO
+-- Movements (painter), styles (painting) further data - fill with data e.g. dates
+-- e.g. date ranges: min-max, 
+-- maybe most common nationalities
+-- Locations: separated by comma | Should have an origin of country, maybe computed by NLP somehow or Wiki
+
+
+
+-- Analytics:
+-- All analytics should run on one (normalized) table. Analytical layer table.
+-- E.g. new painting added is a "fact", these are some dimensions of information: painter: name, gender, nationality, citizenship,
+-- movement of painter: e.g. most common period
+-- institution of painter: e.g. location, etc.
+-- style of painting: period, common in which country/movement
+-- location as dimension? location and its country, /painter's birthplace?/. (Time, movement of time, style)
+
+-- Using this we can construct an analytics plan:
+-- Styles per painting school/institution etc. Can check what is the most common for each institution
+-- Most common movements for styles, most common style per movement, but exclude the style==movement counts
+-- Maybe: Something with painters, where count matters
+
+-- Data marts for these specific queries
+
+-- EDW (ETL Pipeline): When a painting is added, trigger events etc. (possibly add a new painter if the painter doesn't exist and so on... update first last years etc.)
