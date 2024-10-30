@@ -6,7 +6,7 @@ USE painterpalette;
 -- Naming conventions: Tables with first letter capital, columns with camelCase
 
 -- Load painters (from the PainterPalette project)
-DROP TABLE IF EXISTS Artists;
+DROP TABLE IF EXISTS Artists; -- this was partially generated
 CREATE TABLE Artists (
   artistId                  INT NOT NULL PRIMARY KEY,
   artistName                VARCHAR(255),
@@ -40,7 +40,7 @@ CREATE TABLE Artists (
   contemporary              VARCHAR(255),
   artMovement               TEXT,
   occupationType            VARCHAR(255)
-  -- foreign keys?
+  movementId                INT
 );
 CREATE INDEX idx_artist_artistName ON Artists (artistName);
 
@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS Paintings (
     REFERENCES painterpalette.Artists (artistId)
     ON DELETE NO ACTION
     ON UPDATE NO ACTION -- partially generated using MySQL Workbench
+  styleId INT NULL DEFAULT NULL;
 );
 CREATE INDEX idx_combinedpaintings_artistName ON Paintings (artistName);
 
@@ -176,8 +177,8 @@ SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateY
 FROM Art500kPaintings;
 
 -- Drop basis tables for memory (might not be good to drop)
-DROP TABLE Art500kPaintings;
-DROP TABLE WikiartPaintings;
+-- DROP TABLE Art500kPaintings;
+-- DROP TABLE WikiartPaintings;
 
 -- Remove duplicates
 WITH DuplicateArtists AS (
@@ -209,8 +210,6 @@ CREATE TABLE Movements (
 );
 
 -- Add foreign key
-ALTER TABLE Artists -- should move this into the Artists table creation
-ADD movementId INT;
 ALTER TABLE Artists
 ADD CONSTRAINT fk_movementId FOREIGN KEY (movementId) REFERENCES Movements(movementId);
 
@@ -223,8 +222,6 @@ CREATE TABLE Styles (
 );
 
 -- Add foreign key
-ALTER TABLE Paintings
-ADD styleId INT;
 ALTER TABLE Paintings -- will have to index 
 ADD CONSTRAINT fk_styleId FOREIGN KEY (styleId) REFERENCES Styles(styleId);
 
@@ -248,6 +245,7 @@ CREATE TABLE ArtistInstitutions (
 
 
 -- TODO
+-- Reorder code
 -- Movements (painter), styles (painting) further data - fill with data e.g. dates
 -- e.g. date ranges: min-max, 
 -- maybe most common nationalities
