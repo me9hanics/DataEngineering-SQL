@@ -5,6 +5,8 @@ USE painterpalette;
 
 -- Naming conventions: Tables with first letter capital, columns with camelCase
 
+-- ---------------------------- Painters ----------------------------
+
 -- Load painters (from the PainterPalette project)
 DROP TABLE IF EXISTS Artists; -- this was partially generated
 CREATE TABLE Artists (
@@ -39,15 +41,13 @@ CREATE TABLE Artists (
   friendsAndCoworkers       TEXT,
   contemporary              VARCHAR(255),
   artMovement               TEXT,
-  occupationType            VARCHAR(255)
-  movementId                INT
+  occupationType            VARCHAR(255),
+  movementId                INT NULL DEFAULT NULL,
+  INDEX idx_artists_artistName (artistName)
 );
-CREATE INDEX idx_artist_artistName ON Artists (artistName);
 
--- LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_dollar_separator.csv'
 LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_indexed_new.csv'
 INTO TABLE Artists
--- FIELDS TERMINATED BY '$'
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
 LINES TERMINATED BY '\n'
@@ -71,9 +71,61 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- Check the table
-select * from Artists;
+-- It is important that no artists appear twice, else painter-painting joins will have multiple instances for one painting (wrong).
+-- There should be none (can be checked with SELECT artistname FROM Artists group by artistname having count(artistname)>1;) but just in case
+-- Remove duplicates
+WITH DuplicateArtists AS (
+  SELECT MIN(artistId) as artistIdToKeep
+  FROM Artists
+  GROUP BY artistName
+)
+DELETE FROM Artists
+WHERE artistId NOT IN (SELECT artistIdToKeep FROM DuplicateArtists);
 
+-- It makes more sense to load the paintings and the painting data first, but as that is large, don't want to modify it after loading with foreign key constraints (MySQL timeouts); Better to create style and movement tables first
+
+-- ---------------------------- Movements, Styles, Institutions tables & ArtistInstitutions ----------------------------
+
+-- Movements: related to the artist (e.g. Impressionist), styles: related to the painting (e.g. Impressionistic painting)
+CREATE TABLE Movements (
+    movementId INT AUTO_INCREMENT PRIMARY KEY,
+    movementName VARCHAR(255), -- UNIQUE
+    periodStart INT, -- roughly start of the period year
+    periodEnd INT,
+    majorLocation VARCHAR(255) -- e.g. France
+);
+-- Add artist foreign key
+ALTER TABLE Artists
+ADD CONSTRAINT fk_movementId FOREIGN KEY (movementId) REFERENCES Movements(movementId);
+
+CREATE TABLE Styles (
+    styleId INT AUTO_INCREMENT PRIMARY KEY,
+    styleName VARCHAR(255), -- UNIQUE
+    firstDate INT, -- earliest appearance in the painting dataset
+    lastDate INT,
+    majorLocation VARCHAR(255),
+    INDEX idx_styles_styleName (styleName),
+    INDEX idx_styles_styleId (styleId)
+);
+-- We add style constraints in the painting table definition)
+
+-- Institutions
+CREATE TABLE Institutions (
+    institutionId INT AUTO_INCREMENT PRIMARY KEY,
+    institutionName TEXT, -- UNIQUE
+    institutionLocation VARCHAR(255)
+);
+-- N:M relationship inbetween table (like in class)
+CREATE TABLE ArtistInstitutions (
+    artistId INT,
+    institutionId INT,
+    PRIMARY KEY (artistId, institutionId),
+    FOREIGN KEY (artistId) REFERENCES Artists(artistId),
+    FOREIGN KEY (institutionId) REFERENCES Institutions(institutionId)
+);
+
+-- ---------------------------- Paintings: Combined, WikiArt, Art500k & PaintingStyles ----------------------------
+-- Paintings: we first load two datasets, then join them together for a combined table
 
 -- Load WikiArt paintings dataset
 CREATE TABLE IF NOT EXISTS WikiartPaintings (
@@ -99,10 +151,9 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SELECT * FROM WikiartPaintings;
+SELECT * FROM WikiartPaintings LIMIT 10;
 
 -- Load Art500k paintings dataset
-
 CREATE TABLE IF NOT EXISTS Art500kPaintings (
   paintingId INT NOT NULL PRIMARY KEY,
   authorName VARCHAR(255),
@@ -135,13 +186,12 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SELECT COUNT(paintingId) FROM Art500kPaintings;
+SELECT * FROM Art500kPaintings LIMIT 10;
 
--- Join paintings: WikiArt and Art500k
-
+-- Combination of the two datasets
 CREATE TABLE IF NOT EXISTS Paintings (
   paintingId INT AUTO_INCREMENT PRIMARY KEY,
-  artistName VARCHAR(255), -- Index on artist name?
+  artistName VARCHAR(255),
   style VARCHAR(255),
   genre VARCHAR(255),
   movement VARCHAR(255),
@@ -158,17 +208,28 @@ CREATE TABLE IF NOT EXISTS Paintings (
   teachers VARCHAR(255),
   friendsAndCoworkers VARCHAR(255),
   artist_artistId INT NULL DEFAULT NULL,
-  INDEX fk_combinedpaintings_artist_idx (artist_artistId ASC) VISIBLE,
+
+  INDEX idx_paintings_artist_artistId (artist_artistId ASC) VISIBLE,
+  INDEX idx_paintings_artistName (artistName),
+  INDEX idx_paintings_style (style),
+
   CONSTRAINT fk_combinedpaintings_artist
     FOREIGN KEY (artist_artistId)
     REFERENCES painterpalette.Artists (artistId)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION -- partially generated using MySQL Workbench
-  styleId INT NULL DEFAULT NULL;
+    ON UPDATE NO ACTION,
 );
-CREATE INDEX idx_combinedpaintings_artistName ON Paintings (artistName);
 
--- To not insert IDs (those might overlap between the two datasets), we just use auto increment
+-- Inbetween M:N table
+CREATE TABLE IF NOT EXISTS PaintingStyles (
+  paintingId INT,
+  styleId INT,
+  PRIMARY KEY (paintingId, styleId),
+  FOREIGN KEY (paintingId) REFERENCES Paintings(paintingId),
+  FOREIGN KEY (styleId) REFERENCES Styles(styleId)
+);
+
+-- To not insert IDs (those might overlap between the two datasets), we just use auto increment (set)
 INSERT INTO Paintings (artistName, style, genre, movement, tags)
 SELECT artistName, style, genre, movement, tags
 FROM WikiartPaintings;
@@ -180,69 +241,124 @@ FROM Art500kPaintings;
 -- DROP TABLE Art500kPaintings;
 -- DROP TABLE WikiartPaintings;
 
--- Remove duplicates
-WITH DuplicateArtists AS (
-  SELECT MIN(artistId) as artistIdToKeep
-  FROM Artists
-  GROUP BY artistName
-)
-DELETE FROM Artists
-WHERE artistId NOT IN (SELECT artistIdToKeep FROM DuplicateArtists);
+-- ---------------------------- Fill up default columns ----------------------------
 
--- Here, it is important that no artists appear twice, else joins will have multiple pairs for one artist.
--- This can be checked via comparing the two results:
--- SELECT count(*) FROM Paintings;
--- SELECT count(*) FROM Paintings cp LEFT JOIN painterpalette.Artists a ON cp.artistName = a.artistName;
--- Or SELECT artistname FROM Artists group by artistname having count(artistname)>1;
+INSERT INTO Movements (movementName)
+SELECT DISTINCT movement
+FROM Artists;
 
--- Add the ID values based on the artistName (can be null possibly)
-UPDATE Paintings cp
-JOIN Artists a ON cp.artistName = a.artistName
-SET cp.artist_artistId = a.artistId;
+-- Styles: separated by comma
+-- Comma separated values: We can check in one cell how many separate values (styles, later institutions) are, by seeing how many
+-- commas are in it - this is easily done by with checking how many characters we lose when removing commas
+-- Like this:     CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))     the value of this tells how many styles are in the string
 
-SELECT * FROM Paintings;
-SELECT * FROM Artists;
+-- The maximum amount of styles per painting is 3: SELECT MAX(CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) + 1) FROM Paintings;
+-- To check separately the styles when there are more than one in a cell, we need to select each substring one by one
 
--- Movements
-CREATE TABLE Movements (
-    movementId INT AUTO_INCREMENT PRIMARY KEY,
-    movementName VARCHAR(255) -- UNIQUE
-);
+INSERT INTO Styles (styleName)
+SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) AS value
+FROM Paintings
+JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
+ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1;
 
--- Add foreign key
-ALTER TABLE Artists
-ADD CONSTRAINT fk_movementId FOREIGN KEY (movementId) REFERENCES Movements(movementId);
+-- If we run this:
 
--- Styles
-CREATE TABLE Styles (
-    styleId INT AUTO_INCREMENT PRIMARY KEY,
-    styleName VARCHAR(255) -- UNIQUE
-    -- e.g. date ranges: min-max,
-    -- most common country (nationality)
-);
+-- SELECT DISTINCT style, TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) AS value
+-- FROM Paintings
+-- JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
+-- ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1 where CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))>0;
 
--- Add foreign key
-ALTER TABLE Paintings -- will have to index 
-ADD CONSTRAINT fk_styleId FOREIGN KEY (styleId) REFERENCES Styles(styleId);
+-- We'd get something like this
+-- style 							    value
+-- Abstract Art,Abstract Expressionism	Abstract Expressionism
+-- Abstract Art,Abstract Expressionism	Abstract Art
+-- Abstract Art,Color Field Painting	Color Field Painting
+-- Abstract Art,Color Field Painting	Abstract Art
 
--- Institutions
-CREATE TABLE Institutions (
-    institutionId INT AUTO_INCREMENT PRIMARY KEY,
-    institutionName TEXT -- UNIQUE
-    -- location
-);
+-- N:M relationship: we need to find all pairs
+INSERT INTO PaintingStyles (paintingId, styleId)
+SELECT p.paintingId, s.styleId
+FROM Paintings p
+JOIN Styles s
+ON FIND_IN_SET(s.styleName, p.style);
 
--- N:M relationship inbetween table (e.g. like in class)
-CREATE TABLE ArtistInstitutions (
-    artistId INT,
-    institutionId INT,
-    PRIMARY KEY (artistId, institutionId),
-    FOREIGN KEY (artistId) REFERENCES Artists(artistId),
-    FOREIGN KEY (institutionId) REFERENCES Institutions(institutionId)
-);
+-- This returns 6: SELECT MAX(CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) + 1) FROM Artists;
+INSERT INTO Institutions (institutionName)
+SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1)) AS value
+FROM Artists
+JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6) nums
+ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >= nums.n - 1;
 
--- TODO add the data for the movements, styles, institutions
+-- N:M relationship
+INSERT INTO ArtistInstitutions (artistId, institutionId)
+SELECT a.artistId, i.institutionId
+FROM Artists a
+JOIN Institutions i
+ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 
+-- ---------------------------- Fill up foreign key columns ----------------------------
+-- Add the ID values based on the artistName, movementName, styleName (can be null)
+UPDATE Paintings p
+JOIN Artists a ON p.artistName = a.artistName
+SET p.artist_artistId = a.artistId;
+
+UPDATE Artists a
+JOIN Movements m ON a.Movement = m.movementName
+SET a.movementId = m.movementId;
+
+INSERT INTO PaintingStyles (paintingId, styleId)
+SELECT p.paintingId, s.styleId
+FROM Paintings p
+JOIN Styles s
+ON FIND_IN_SET(s.styleName, p.style);
+
+INSERT INTO ArtistInstitutions (artistId, institutionId)
+SELECT a.artistId, i.institutionId
+FROM Artists a
+JOIN Institutions i
+ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
+
+-- Updating in batches (to not have a timeout)
+-- SET @batch_size = 10000;
+-- SET @offset = 0;
+
+-- WHILE (SELECT COUNT(*) FROM Paintings WHERE styleId IS NULL) > 0 DO
+--     UPDATE Paintings p
+--     JOIN Styles s ON p.style = s.styleName
+--     SET p.styleId = s.styleId
+--     WHERE p.styleId IS NULL
+--     LIMIT @batch_size OFFSET @offset;
+    
+--     SET @offset = @offset + @batch_size;
+-- END WHILE;
+
+-- ---------------------------- Fill up other columns ----------------------------
+
+-- This query finds the first year in every string, and selects the minimum group by styleId
+-- SELECT MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED))
+-- FROM Styles s JOIN Paintings p ON p.styleId = s.styleId WHERE p.dateYear REGEXP '[0-9]{4}' GROUP BY s.styleId;
+UPDATE Styles s
+JOIN (
+    SELECT p.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+    FROM Paintings p
+    WHERE p.dateYear REGEXP '[0-9]{4}'
+    GROUP BY p.styleId
+) AS minYears ON s.styleId = minYears.styleId
+SET s.firstDate = minYears.minYear;
+-- Correct the 0s to null
+UPDATE Styles s
+SET s.firstDate = null
+WHERE s.firstDate = 0;
+
+-- TODO add the data for other columns (e.g. periodStart, periodEnd, majorLocation)
+
+-- ---------------------------- Check data ----------------------------
+
+SELECT * FROM Paintings LIMIT 100;
+SELECT * FROM Artists LIMIT 100;
+SELECT * FROM Movements LIMIT 100;
+SELECT * FROM Styles LIMIT 100;
+SELECT * FROM Institutions LIMIT 100;
 
 -- TODO
 -- Reorder code
