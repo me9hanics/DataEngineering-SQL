@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS Paintings (
     FOREIGN KEY (artist_artistId)
     REFERENCES painterpalette.Artists (artistId)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
+    ON UPDATE NO ACTION
 );
 
 -- Inbetween M:N table
@@ -241,7 +241,7 @@ FROM Art500kPaintings;
 -- DROP TABLE Art500kPaintings;
 -- DROP TABLE WikiartPaintings;
 
--- ---------------------------- Fill up default columns ----------------------------
+-- ---------------------------- Fill up default (major) columns ----------------------------
 
 INSERT INTO Movements (movementName)
 SELECT DISTINCT movement
@@ -277,10 +277,14 @@ ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1;
 
 -- N:M relationship: we need to find all pairs
 INSERT INTO PaintingStyles (paintingId, styleId)
-SELECT p.paintingId, s.styleId
+SELECT DISTINCT p.paintingId, s.styleId
 FROM Paintings p
 JOIN Styles s
-ON FIND_IN_SET(s.styleName, p.style);
+ON FIND_IN_SET(s.styleName, p.style)
+WHERE (p.paintingId, s.styleId) NOT IN ( -- Probably unneccessary
+    SELECT paintingId, styleId
+    FROM PaintingStyles
+);
 
 -- This returns 6: SELECT MAX(CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) + 1) FROM Artists;
 INSERT INTO Institutions (institutionName)
@@ -292,7 +296,7 @@ ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >
 -- N:M relationship
 INSERT INTO ArtistInstitutions (artistId, institutionId)
 SELECT a.artistId, i.institutionId
-FROM Artists a
+FROM Artists
 JOIN Institutions i
 ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 
@@ -305,18 +309,6 @@ SET p.artist_artistId = a.artistId;
 UPDATE Artists a
 JOIN Movements m ON a.Movement = m.movementName
 SET a.movementId = m.movementId;
-
-INSERT INTO PaintingStyles (paintingId, styleId)
-SELECT p.paintingId, s.styleId
-FROM Paintings p
-JOIN Styles s
-ON FIND_IN_SET(s.styleName, p.style);
-
-INSERT INTO ArtistInstitutions (artistId, institutionId)
-SELECT a.artistId, i.institutionId
-FROM Artists a
-JOIN Institutions i
-ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 
 -- Updating in batches (to not have a timeout)
 -- SET @batch_size = 10000;
@@ -335,16 +327,21 @@ ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 -- ---------------------------- Fill up other columns ----------------------------
 
 -- This query finds the first year in every string, and selects the minimum group by styleId
--- SELECT MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED))
--- FROM Styles s JOIN Paintings p ON p.styleId = s.styleId WHERE p.dateYear REGEXP '[0-9]{4}' GROUP BY s.styleId;
+-- SELECT s.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+-- FROM Paintings p JOIN PaintingStyles ps ON p.paintingId = ps.paintingId JOIN Styles s ON ps.styleId = s.styleId
+-- WHERE p.dateYear REGEXP '[0-9]{4}' GROUP BY s.styleId;
+
 UPDATE Styles s
 JOIN (
-    SELECT p.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+    SELECT s.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
     FROM Paintings p
+    JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
+    JOIN Styles s ON ps.styleId = s.styleId
     WHERE p.dateYear REGEXP '[0-9]{4}'
-    GROUP BY p.styleId
+    GROUP BY s.styleId
 ) AS minYears ON s.styleId = minYears.styleId
 SET s.firstDate = minYears.minYear;
+
 -- Correct the 0s to null
 UPDATE Styles s
 SET s.firstDate = null
@@ -359,7 +356,8 @@ SELECT * FROM Artists LIMIT 100;
 SELECT * FROM Movements LIMIT 100;
 SELECT * FROM Styles LIMIT 100;
 SELECT * FROM Institutions LIMIT 100;
-
+SELECT * FROM ArtistInstitutions LIMIT 100;
+SELECT * FROM PaintingStyles LIMIT 100;
 -- TODO
 -- Reorder code
 -- Movements (painter), styles (painting) further data - fill with data e.g. dates
