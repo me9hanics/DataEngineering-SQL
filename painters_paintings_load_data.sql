@@ -329,7 +329,7 @@ JOIN (
     FROM Paintings p
     JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     JOIN Styles s ON ps.styleId = s.styleId
-    WHERE p.dateYear REGEXP '[0-9]{4}'
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
     GROUP BY s.styleId
 ) AS minYears ON s.styleId = minYears.styleId
 SET s.firstDate = minYears.minYear;
@@ -345,7 +345,7 @@ JOIN (
     FROM Paintings p
     JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     JOIN Styles s ON ps.styleId = s.styleId
-    WHERE p.dateYear REGEXP '[0-9]{4}'
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
     GROUP BY s.styleId
 ) AS maxYears ON s.styleId = maxYears.styleId
 SET s.lastDate = maxYears.maxYear;
