@@ -254,19 +254,23 @@ FROM Artists;
 
 -- The maximum amount of styles per painting is 3: SELECT MAX(CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) + 1) FROM Paintings;
 -- To check separately the styles when there are more than one in a cell, we need to select each substring one by one
+-- SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1) gives the n-th value in the comma separated list
+-- The first substring_index crops the first n values, then the second one gives the last value only
 
 INSERT INTO Styles (styleName)
-SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) AS value
+SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) AS substring
 FROM Paintings
 JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
-ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1;
+ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1
+WHERE substring != '';
 
 -- If we run this:
 
 -- SELECT DISTINCT style, TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) AS value
 -- FROM Paintings
 -- JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
--- ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1 where CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))>0;
+-- ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1 
+-- where CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))>0;
 
 -- We'd get something like this
 -- style 							    value
@@ -274,6 +278,7 @@ ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1;
 -- Abstract Art,Abstract Expressionism	Abstract Art
 -- Abstract Art,Color Field Painting	Color Field Painting
 -- Abstract Art,Color Field Painting	Abstract Art
+-- ...
 
 -- N:M relationship: we need to find all pairs
 INSERT INTO PaintingStyles (paintingId, styleId)
@@ -310,20 +315,6 @@ UPDATE Artists a
 JOIN Movements m ON a.Movement = m.movementName
 SET a.movementId = m.movementId;
 
--- Updating in batches (to not have a timeout)
--- SET @batch_size = 10000;
--- SET @offset = 0;
-
--- WHILE (SELECT COUNT(*) FROM Paintings WHERE styleId IS NULL) > 0 DO
---     UPDATE Paintings p
---     JOIN Styles s ON p.style = s.styleName
---     SET p.styleId = s.styleId
---     WHERE p.styleId IS NULL
---     LIMIT @batch_size OFFSET @offset;
-    
---     SET @offset = @offset + @batch_size;
--- END WHILE;
-
 -- ---------------------------- Fill up other columns ----------------------------
 
 -- This query finds the first year in every string, and selects the minimum group by styleId
@@ -331,6 +322,7 @@ SET a.movementId = m.movementId;
 -- FROM Paintings p JOIN PaintingStyles ps ON p.paintingId = ps.paintingId JOIN Styles s ON ps.styleId = s.styleId
 -- WHERE p.dateYear REGEXP '[0-9]{4}' GROUP BY s.styleId;
 
+-- Styles
 UPDATE Styles s
 JOIN (
     SELECT s.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
@@ -347,6 +339,65 @@ UPDATE Styles s
 SET s.firstDate = null
 WHERE s.firstDate = 0;
 
+UPDATE Styles s
+JOIN (
+    SELECT s.styleId, MAX(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS maxYear
+    FROM Paintings p
+    JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
+    JOIN Styles s ON ps.styleId = s.styleId
+    WHERE p.dateYear REGEXP '[0-9]{4}'
+    GROUP BY s.styleId
+) AS maxYears ON s.styleId = maxYears.styleId
+SET s.lastDate = maxYears.maxYear;
+
+-- Correct the 0s to null
+UPDATE Styles s
+SET s.lastDate = null
+WHERE s.lastDate = 0;
+
+-- TODO majorLocation
+
+-- Movements
+
+-- periodStart, periodEnd, majorLocation
+UPDATE Movements m
+JOIN (
+    SELECT m.movementId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+    FROM Paintings p
+    JOIN Artists a ON p.artistName = a.artistName
+    JOIN Movements m ON a.Movement = m.movementName
+    WHERE p.dateYear REGEXP '[0-9]{4}'
+    GROUP BY m.movementId
+) AS minYears ON m.movementId = minYears.movementId
+SET m.periodStart = minYears.minYear;
+
+-- Correct the 0s to null
+UPDATE Movements m
+SET m.periodStart = null
+WHERE m.periodStart = 0;
+
+UPDATE Movements m
+JOIN (
+    SELECT m.movementId, MAX(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS maxYear
+    FROM Paintings p
+    JOIN Artists a ON p.artistName = a.artistName
+    JOIN Movements m ON a.Movement = m.movementName
+    WHERE p.dateYear REGEXP '[0-9]{4}'
+    GROUP BY m.movementId
+) AS maxYears ON m.movementId = maxYears.movementId
+SET m.periodEnd = maxYears.maxYear;
+
+-- Correct the 0s to null
+UPDATE Movements m
+SET m.periodEnd = null
+WHERE m.periodEnd = 0;
+
+-- TODO majorLocation
+
+-- Institutions
+
+-- TODO institutionLocation
+
 -- TODO add the data for other columns (e.g. periodStart, periodEnd, majorLocation)
 
 -- ---------------------------- Check data ----------------------------
@@ -355,11 +406,11 @@ SELECT * FROM Paintings LIMIT 100;
 SELECT * FROM Artists LIMIT 100;
 SELECT * FROM Movements LIMIT 100;
 SELECT * FROM Styles LIMIT 100;
+SELECT * FROM PaintingStyles LIMIT 100;
 SELECT * FROM Institutions LIMIT 100;
 SELECT * FROM ArtistInstitutions LIMIT 100;
-SELECT * FROM PaintingStyles LIMIT 100;
 -- TODO
--- Reorder code
+-- Reorder code?
 -- Movements (painter), styles (painting) further data - fill with data e.g. dates
 -- e.g. date ranges: min-max, 
 -- maybe most common nationalities
