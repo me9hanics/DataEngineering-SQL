@@ -262,7 +262,7 @@ SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ','
 FROM Paintings
 JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
 ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1
-WHERE substring != '';
+WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1))!='';
 
 -- If we run this:
 
@@ -301,7 +301,7 @@ ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >
 -- N:M relationship
 INSERT INTO ArtistInstitutions (artistId, institutionId)
 SELECT a.artistId, i.institutionId
-FROM Artists
+FROM Artists a
 JOIN Institutions i
 ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 
@@ -325,11 +325,11 @@ SET a.movementId = m.movementId;
 -- Styles
 UPDATE Styles s
 JOIN (
-    SELECT s.styleId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+    SELECT s.styleId, MIN(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS minYear
     FROM Paintings p
     JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     JOIN Styles s ON ps.styleId = s.styleId
-    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
+    WHERE p.dateYear REGEXP '[0-9]{4}'
     GROUP BY s.styleId
 ) AS minYears ON s.styleId = minYears.styleId
 SET s.firstDate = minYears.minYear;
@@ -341,11 +341,11 @@ WHERE s.firstDate = 0;
 
 UPDATE Styles s
 JOIN (
-    SELECT s.styleId, MAX(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS maxYear
+    SELECT s.styleId, MAX(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS maxYear
     FROM Paintings p
     JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     JOIN Styles s ON ps.styleId = s.styleId
-    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
+    WHERE p.dateYear REGEXP '[0-9]{4}'
     GROUP BY s.styleId
 ) AS maxYears ON s.styleId = maxYears.styleId
 SET s.lastDate = maxYears.maxYear;
@@ -355,18 +355,14 @@ UPDATE Styles s
 SET s.lastDate = null
 WHERE s.lastDate = 0;
 
--- TODO majorLocation
-
 -- Movements
-
--- periodStart, periodEnd, majorLocation
 UPDATE Movements m
 JOIN (
-    SELECT m.movementId, MIN(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS minYear
+    SELECT m.movementId, MIN(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS minYear
     FROM Paintings p
     JOIN Artists a ON p.artistName = a.artistName
     JOIN Movements m ON a.Movement = m.movementName
-    WHERE p.dateYear REGEXP '[0-9]{4}'
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
     GROUP BY m.movementId
 ) AS minYears ON m.movementId = minYears.movementId
 SET m.periodStart = minYears.minYear;
@@ -378,7 +374,44 @@ WHERE m.periodStart = 0;
 
 UPDATE Movements m
 JOIN (
-    SELECT m.movementId, MAX(CAST(SUBSTRING(p.dateYear, LOCATE(' ', p.dateYear) + 1, 4) AS UNSIGNED)) AS maxYear
+    SELECT m.movementId, MAX(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS maxYear
+    FROM Paintings p
+    JOIN Artists a ON p.artistName = a.artistName
+    JOIN Movements m ON a.Movement = m.movementName
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
+    GROUP BY m.movementId
+) AS maxYears ON m.movementId = maxYears.movementId
+SET m.periodEnd = maxYears.maxYear;
+
+-- Correct the 0s to null
+UPDATE Movements m
+SET m.periodEnd = null
+WHERE m.periodEnd = 0;
+
+-- TODO majorLocation
+
+-- Movements
+
+-- periodStart, periodEnd, majorLocation
+UPDATE Movements m
+JOIN (
+    SELECT m.movementId, MIN(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS minYear
+    FROM Paintings p
+    JOIN Artists a ON p.artistName = a.artistName
+    JOIN Movements m ON a.Movement = m.movementName
+    WHERE p.dateYear REGEXP '[0-9]{4}'
+    GROUP BY m.movementId
+) AS minYears ON m.movementId = minYears.movementId
+SET m.periodStart = minYears.minYear;
+
+-- Correct the 0s to null
+UPDATE Movements m
+SET m.periodStart = NULL
+WHERE m.periodStart = 0;
+
+UPDATE Movements m
+JOIN (
+    SELECT m.movementId, MAX(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS maxYear
     FROM Paintings p
     JOIN Artists a ON p.artistName = a.artistName
     JOIN Movements m ON a.Movement = m.movementName
