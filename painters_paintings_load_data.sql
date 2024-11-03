@@ -245,7 +245,8 @@ FROM Art500kPaintings;
 
 INSERT INTO Movements (movementName)
 SELECT DISTINCT movement
-FROM Artists;
+FROM Artists
+WHERE movement != '';
 
 -- Styles: separated by comma
 -- Comma separated values: We can check in one cell how many separate values (styles, later institutions) are, by seeing how many
@@ -296,7 +297,8 @@ INSERT INTO Institutions (institutionName)
 SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1)) AS value
 FROM Artists
 JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6) nums
-ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >= nums.n - 1;
+ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >= nums.n - 1
+WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1))!='';
 
 -- N:M relationship
 INSERT INTO ArtistInstitutions (artistId, institutionId)
@@ -388,8 +390,28 @@ UPDATE Movements m
 SET m.periodEnd = null
 WHERE m.periodEnd = 0;
 
--- TODO majorLocation
+-- We load the style - origin pairs from a separate file (the origins were generated via generative AI using Python)
+DROP TABLE IF EXISTS temp_styles_locations;
+CREATE TABLE temp_styles_locations (
+    styleName VARCHAR(255),
+    originCountry VARCHAR(255)
+);
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/styles_origins.csv'
+INTO TABLE temp_styles_locations
+FIELDS TERMINATED BY ',' 
+optionally ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(@styleName, @originCountry)
+SET
+    styleName = TRIM(@styleName),
+    originCountry = TRIM(@originCountry);
+    
+UPDATE Styles s
+JOIN temp_styles_locations tsl ON s.styleName = tsl.styleName
+SET s.majorLocation = tsl.originCountry;
 
+DROP TABLE temp_movements_locations;
 -- Movements
 
 -- periodStart, periodEnd, majorLocation
@@ -404,7 +426,6 @@ JOIN (
 ) AS minYears ON m.movementId = minYears.movementId
 SET m.periodStart = minYears.minYear;
 
--- Correct the 0s to null
 UPDATE Movements m
 SET m.periodStart = NULL
 WHERE m.periodStart = 0;
@@ -420,12 +441,31 @@ JOIN (
 ) AS maxYears ON m.movementId = maxYears.movementId
 SET m.periodEnd = maxYears.maxYear;
 
--- Correct the 0s to null
 UPDATE Movements m
 SET m.periodEnd = null
 WHERE m.periodEnd = 0;
 
--- TODO majorLocation
+DROP TABLE IF EXISTS temp_movements_locations;
+CREATE TABLE temp_movements_locations (
+    movementName VARCHAR(255),
+    originCountry VARCHAR(255)
+);
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/movements_origins.csv'
+INTO TABLE temp_movements_locations
+FIELDS TERMINATED BY ','
+optionally ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(@movementName, @originCountry)
+SET
+    movementName = TRIM(@movementName),
+    originCountry = TRIM(@originCountry);
+
+UPDATE Movements m
+JOIN temp_movements_locations tml ON m.movementName = tml.movementName
+SET m.majorLocation = tml.originCountry;
+
+DROP TABLE temp_movements_locations;
 
 -- Institutions
 
@@ -444,12 +484,7 @@ SELECT * FROM Institutions LIMIT 100;
 SELECT * FROM ArtistInstitutions LIMIT 100;
 -- TODO
 -- Reorder code?
--- Movements (painter), styles (painting) further data - fill with data e.g. dates
--- e.g. date ranges: min-max, 
--- maybe most common nationalities
--- Locations: separated by comma | Should have an origin of country, maybe computed by NLP somehow or Wiki
-
-
+-- maybe add most common nationalities
 
 -- Analytics:
 -- All analytics should run on one (normalized) table. Analytical layer table.
