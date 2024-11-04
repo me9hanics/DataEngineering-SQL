@@ -229,6 +229,8 @@ CREATE TABLE IF NOT EXISTS PaintingStyles (
   FOREIGN KEY (styleId) REFERENCES Styles(styleId)
 );
 
+-- ---------------------------- Fill up Paintings ----------------------------
+
 -- To not insert IDs (those might overlap between the two datasets), we just use auto increment (set)
 INSERT INTO Paintings (artistName, style, genre, movement, tags)
 SELECT artistName, style, genre, movement, tags
@@ -241,7 +243,7 @@ FROM Art500kPaintings;
 -- DROP TABLE Art500kPaintings;
 -- DROP TABLE WikiartPaintings;
 
--- ---------------------------- Fill up default (major) columns ----------------------------
+-- ---------------------------- Fill up major columns: Movements, Styles, Institutions, PaintingStyles, ArtistInstitutions ----------------------------
 
 INSERT INTO Movements (movementName)
 SELECT DISTINCT movement
@@ -249,9 +251,10 @@ FROM Artists
 WHERE movement != '';
 
 -- Styles: separated by comma
+
 -- Comma separated values: We can check in one cell how many separate values (styles, later institutions) are, by seeing how many
 -- commas are in it - this is easily done by with checking how many characters we lose when removing commas
--- Like this:     CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))     the value of this tells how many styles are in the string
+-- Like this:     CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', ''))+1     the value tells how many styles are in the string
 
 -- The maximum amount of styles per painting is 3: SELECT MAX(CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) + 1) FROM Paintings;
 -- To check separately the styles when there are more than one in a cell, we need to select each substring one by one
@@ -263,7 +266,7 @@ SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ','
 FROM Paintings
 JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3) numbers -- Just numbers 1, 2, 3
 ON CHAR_LENGTH(style) - CHAR_LENGTH(REPLACE(style, ',', '')) >= numbers.n - 1
-WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1))!='';
+WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(style, ',', numbers.n), ',', -1)) NOT IN ('', 'Unknown', 'unknown');
 
 -- If we run this:
 
@@ -298,7 +301,9 @@ SELECT DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n
 FROM Artists
 JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6) nums
 ON CHAR_LENGTH(PaintingSchool) - CHAR_LENGTH(REPLACE(PaintingSchool, ',', '')) >= nums.n - 1
-WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1))!='';
+WHERE TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1))
+NOT IN ('', 'Painting', 'Painting.', 'S', 'Portugal1914', 'p.120', '1882','February 25','No.1314','Vol. XXVI')
+AND TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(PaintingSchool, ',', nums.n), ',', -1)) NOT LIKE '%daguerreobase%';
 
 -- N:M relationship
 INSERT INTO ArtistInstitutions (artistId, institutionId)
@@ -307,7 +312,7 @@ FROM Artists a
 JOIN Institutions i
 ON FIND_IN_SET(i.institutionName, a.PaintingSchool);
 
--- ---------------------------- Fill up foreign key columns ----------------------------
+-- ---------------------------- Fill up foreign key columns: Paintings, Artists ----------------------------
 -- Add the ID values based on the artistName, movementName, styleName (can be null)
 UPDATE Paintings p
 JOIN Artists a ON p.artistName = a.artistName
@@ -352,43 +357,9 @@ JOIN (
 ) AS maxYears ON s.styleId = maxYears.styleId
 SET s.lastDate = maxYears.maxYear;
 
--- Correct the 0s to null
 UPDATE Styles s
 SET s.lastDate = null
 WHERE s.lastDate = 0;
-
--- Movements
-UPDATE Movements m
-JOIN (
-    SELECT m.movementId, MIN(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS minYear
-    FROM Paintings p
-    JOIN Artists a ON p.artistName = a.artistName
-    JOIN Movements m ON a.Movement = m.movementName
-    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
-    GROUP BY m.movementId
-) AS minYears ON m.movementId = minYears.movementId
-SET m.periodStart = minYears.minYear;
-
--- Correct the 0s to null
-UPDATE Movements m
-SET m.periodStart = null
-WHERE m.periodStart = 0;
-
-UPDATE Movements m
-JOIN (
-    SELECT m.movementId, MAX(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS maxYear
-    FROM Paintings p
-    JOIN Artists a ON p.artistName = a.artistName
-    JOIN Movements m ON a.Movement = m.movementName
-    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
-    GROUP BY m.movementId
-) AS maxYears ON m.movementId = maxYears.movementId
-SET m.periodEnd = maxYears.maxYear;
-
--- Correct the 0s to null
-UPDATE Movements m
-SET m.periodEnd = null
-WHERE m.periodEnd = 0;
 
 -- We load the style - origin pairs from a separate file (the origins were generated via generative AI using Python)
 DROP TABLE IF EXISTS temp_styles_locations;
@@ -411,32 +382,34 @@ UPDATE Styles s
 JOIN temp_styles_locations tsl ON s.styleName = tsl.styleName
 SET s.majorLocation = tsl.originCountry;
 
-DROP TABLE temp_movements_locations;
+DROP TABLE temp_styles_locations;
+
 -- Movements
 
--- periodStart, periodEnd, majorLocation
+-- periodStart
 UPDATE Movements m
 JOIN (
     SELECT m.movementId, MIN(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS minYear
     FROM Paintings p
     JOIN Artists a ON p.artistName = a.artistName
     JOIN Movements m ON a.Movement = m.movementName
-    WHERE p.dateYear REGEXP '[0-9]{4}'
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
     GROUP BY m.movementId
 ) AS minYears ON m.movementId = minYears.movementId
 SET m.periodStart = minYears.minYear;
 
 UPDATE Movements m
-SET m.periodStart = NULL
+SET m.periodStart = null
 WHERE m.periodStart = 0;
 
+-- periodEnd
 UPDATE Movements m
 JOIN (
     SELECT m.movementId, MAX(CAST(REGEXP_SUBSTR(p.dateYear, '[0-9]{4}') AS UNSIGNED)) AS maxYear
     FROM Paintings p
     JOIN Artists a ON p.artistName = a.artistName
     JOIN Movements m ON a.Movement = m.movementName
-    WHERE p.dateYear REGEXP '[0-9]{4}'
+    WHERE p.dateYear REGEXP '[0-9]{4}' AND p.dateYear IS NOT NULL
     GROUP BY m.movementId
 ) AS maxYears ON m.movementId = maxYears.movementId
 SET m.periodEnd = maxYears.maxYear;
@@ -445,6 +418,7 @@ UPDATE Movements m
 SET m.periodEnd = null
 WHERE m.periodEnd = 0;
 
+-- majorLocation
 DROP TABLE IF EXISTS temp_movements_locations;
 CREATE TABLE temp_movements_locations (
     movementName VARCHAR(255),
@@ -469,9 +443,25 @@ DROP TABLE temp_movements_locations;
 
 -- Institutions
 
--- TODO institutionLocation
+DROP TABLE IF EXISTS temp_institutions_locations;
+CREATE TABLE temp_institutions_locations (
+    institutionName VARCHAR(255),
+    institutionLocation VARCHAR(255)
+);
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/institutions_origins.csv'
+INTO TABLE temp_institutions_locations
+FIELDS TERMINATED BY ','
+optionally ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(@institutionName, @institutionLocation)
+SET
+    institutionName = TRIM(@institutionName),
+    institutionLocation = TRIM(@institutionLocation);
 
--- TODO add the data for other columns (e.g. periodStart, periodEnd, majorLocation)
+UPDATE Institutions i
+JOIN temp_institutions_locations til ON i.institutionName = til.institutionName
+SET i.institutionLocation = til.institutionLocation;
 
 -- ---------------------------- Check data ----------------------------
 
