@@ -10,7 +10,7 @@ USE painterpalette;
 -- Load painters (from the PainterPalette project)
 DROP TABLE IF EXISTS Artists; -- this was partially generated
 CREATE TABLE Artists (
-  artistId                  INT NOT NULL PRIMARY KEY,
+  artistId                  INT NOT NULL PRIMARY KEY AUTO_INCREMENT, -- could add auto increment after loading the data with IDs, but that is complicated (DDL statements require dynamic SQL) and unnecessary
   artistName                VARCHAR(255),
   nationality               VARCHAR(255),
   citizenship               VARCHAR(255),
@@ -46,13 +46,13 @@ CREATE TABLE Artists (
   INDEX idx_artists_artistName (artistName)
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists_indexed_new.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists.csv'
 INTO TABLE Artists
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES
-(artistId, artistName, nationality, citizenship, gender, styles, movement, art500kMovements, birthPlace, deathPlace,
+(artistName, nationality, citizenship, gender, styles, movement, art500kMovements, birthPlace, deathPlace,
 birthYear, deathYear, firstYear, lastYear, wikiartPicturesCount, locations, locationsWithYears, stylesExtended, stylesCount,
 stylesYears, occupations, paintingsExhibitedAt, paintingsExhibitedAtCount, paintingSchool, influencedBy, influencedOn,
 pupils, teachers, friendsAndCoworkers, contemporary, artMovement, occupationType)
@@ -61,30 +61,21 @@ SET deathYear = CASE WHEN deathYear = '' THEN NULL ELSE deathYear END,
     firstYear = CASE WHEN firstYear = '' THEN NULL ELSE firstYear END,
     lastYear = CASE WHEN lastYear = '' THEN NULL ELSE lastYear END,
     wikiartPicturesCount = CASE WHEN wikiartPicturesCount = '' THEN NULL ELSE wikiartPicturesCount END;
-    
--- Set auto increment after loading, from the last index    
-SET @max_id = (SELECT MAX(artistId) FROM Artists);
--- Appearantly, DDL (Data Definition Language) statements like ALTER TABLE, not even inside a stored procedure, so had to do the following
-
-SET @sql = CONCAT('ALTER TABLE Artists AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
 
 -- It is important that no artists appear twice, else painter-painting joins will have multiple instances for one painting (wrong).
--- There should be none (can be checked with SELECT artistname FROM Artists group by artistname having count(artistname)>1;) but just in case
+-- There should be none (checked with SELECT artistname FROM Artists group by artistname having count(artistname)>1;) but just in case
 -- Remove duplicates
 WITH DuplicateArtists AS (
-  SELECT MIN(artistId) as artistIdToKeep
+  SELECT MIN(artistId) as artistIdToKeep -- Keeping only the first instance
   FROM Artists
   GROUP BY artistName
 )
 DELETE FROM Artists
 WHERE artistId NOT IN (SELECT artistIdToKeep FROM DuplicateArtists);
 
--- It makes more sense to load the paintings and the painting data first, but as that is large, don't want to modify it after loading with foreign key constraints (MySQL timeouts); Better to create style and movement tables first
-
 -- ---------------------------- Movements, Styles, Institutions tables & ArtistInstitutions ----------------------------
+-- It makes more sense to load the paintings and the painting data first, but as that is large, don't want to modify it after loading with foreign key constraints (MySQL timeouts);
+-- Better to create style and movement tables first
 
 -- Movements: related to the artist (e.g. Impressionist), styles: related to the painting (e.g. Impressionistic painting)
 CREATE TABLE Movements (
@@ -129,7 +120,7 @@ CREATE TABLE ArtistInstitutions (
 
 -- Load WikiArt paintings dataset
 CREATE TABLE IF NOT EXISTS WikiartPaintings (
-  paintingId INT NOT NULL PRIMARY KEY,
+  paintingId INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
   artistName VARCHAR(255),
   style VARCHAR(255),
   genre VARCHAR(255),
@@ -137,25 +128,19 @@ CREATE TABLE IF NOT EXISTS WikiartPaintings (
   tags TEXT
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_wikiart_indexed.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_wikiart.csv'
 INTO TABLE WikiartPaintings
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES
-(paintingId, artistName, style, genre, movement, tags);
-
-SET @max_id = (SELECT MAX(paintingId) FROM WikiartPaintings);
-SET @sql = CONCAT('ALTER TABLE WikiartPaintings AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+(artistName, style, genre, movement, tags);
 
 SELECT * FROM WikiartPaintings LIMIT 10;
 
 -- Load Art500k paintings dataset
 CREATE TABLE IF NOT EXISTS Art500kPaintings (
-  paintingId INT NOT NULL PRIMARY KEY,
+  paintingId INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
   authorName VARCHAR(255),
   genre VARCHAR(255),
   style VARCHAR(255),
@@ -172,19 +157,13 @@ CREATE TABLE IF NOT EXISTS Art500kPaintings (
   friendsAndCoworkers VARCHAR(255)
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_art500k_indexed.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_art500k.csv'
 INTO TABLE Art500kPaintings
 FIELDS TERMINATED BY ','
 OPTIONALLY ENCLOSED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES
-(paintingId, authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers);
-
-SET @max_id = (SELECT MAX(paintingId) FROM Art500kPaintings);
-SET @sql = CONCAT('ALTER TABLE Art500kPaintings AUTO_INCREMENT = ', @max_id + 1); -- dynamic SQL statement
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+(authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers);
 
 SELECT * FROM Art500kPaintings LIMIT 10;
 
