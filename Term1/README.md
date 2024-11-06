@@ -84,8 +84,15 @@ Once I have these, I update artist and painting foreign keys, and start filling 
 
 This results in the diagram seen above.
 
-**`analytics_table.sql`**: The "analytical layer", contains the construction of the denormalized table discussed above using the relational database created prior.
+**`analytics_table.sql`**: The "analytical layer", contains the construction of the denormalized table discussed above using the relational database created prior, called `PaintData`.
 
 Because many paintings do not have a painter (stored in our database), and many painters have no institution, etc. and each (foreign key) relation is allowed to be `Null`, I use left joins for joining tables to create the analytical table. This way all instances of paintings are included.<br>
 
-...
+**`data_marts_analytics.sql`**: The "data mart" layer. Building on the analytical table, contains the creation of views for specific queries:
+
+- the most common styles per institution
+- the most common movements per style and vica versa, sorted by, the most common styles per movement, etc. 
+
+These are created as views, simultating data marts, and can be updated with new data by running the queries again. Views in MySQL are unmaterialized, which allow for efficiently querying, without duplicating the data, unlike materialized views. (Materialized views are not implemented in this project.)
+
+To simplify some of the analytics, in the analytical table I did not group instances together (e.g. one painting with multiple styles will have an instance for each style, the same for each painter institution), i.e. some paintings have multiple instances, differing in style or artist institutions. Using this is perfect for most of the queries, but for analytics where the number of paintings matter or other cases, I created a view called `GroupedPaintData` that combines instances of paintings with distinct styles and institutions. The institutions and styles, and their locations are concatenated into one string. This view helps in reducing the redundant grouping we'd have to do for many queries if we just use `PaintData`.
