@@ -222,9 +222,9 @@ INSERT INTO Paintings (artistName, genre, style, nationality, paintingSchool, mo
 SELECT authorName, genre, style, nationality, paintingSchool, artMovement, dateYear, influencedBy, influencedOn, tag, pupils, locations, teachers, friendsAndCoworkers
 FROM Art500kPaintings;
 
--- Drop basis tables for memory (might not be good to drop)
--- DROP TABLE Art500kPaintings;
--- DROP TABLE WikiartPaintings;
+-- Drop basis tables, as we don't need them anymore
+DROP TABLE Art500kPaintings;
+DROP TABLE WikiartPaintings;
 
 -- ---------------------------- Fill up major columns: Movements, Styles, Institutions, PaintingStyles, ArtistInstitutions ----------------------------
 
@@ -445,6 +445,8 @@ SET
 UPDATE Institutions i
 JOIN temp_institutions_locations til ON i.institutionName = til.institutionName
 SET i.institutionLocation = til.institutionLocation;
+
+DROP TABLE temp_institutions_locations;
 
 -- ---------------------------- Check data ----------------------------
 
