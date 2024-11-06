@@ -1,14 +1,18 @@
--- C:\GitHubRepo\ArtProject\PainterPalette\datasets
 drop schema IF EXISTS painterpalette;
 create schema painterpalette;
 USE painterpalette;
+-- Paths: The base directory is the root, C:/GitHubRepo/DataEngineering-SQL/, datasets are in the datasets subfolder.
+-- Change the base directory in each path!!!
+-- Wrote a stored procedure for loading data, but MySQL among many things doesn't allow LOAD DATA INFILE in stored procedures
+-- (It's also not possible to use variables in LOAD DATA INFILE statements, so I cannot just have variables at the top of the script that each user can change).
+-- The "LOCAL" keyword in the LOAD DATA LOCAL INFILE statements can enable relative paths, however there issues still arise, so I just used full paths.
 
 -- Naming conventions: Tables with first letter capital, columns with camelCase
 
 -- ---------------------------- Painters ----------------------------
 
 -- Load painters (from the PainterPalette project)
-DROP TABLE IF EXISTS Artists; -- this was partially generated
+DROP TABLE IF EXISTS Artists;
 CREATE TABLE Artists (
   artistId                  INT NOT NULL PRIMARY KEY AUTO_INCREMENT, -- could add auto increment after loading the data with IDs, but that is complicated (DDL statements require dynamic SQL) and unnecessary
   artistName                VARCHAR(255),
