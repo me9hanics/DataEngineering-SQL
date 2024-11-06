@@ -69,7 +69,7 @@ BEGIN
         VALUES (NEW.paintingId, styleId_);
     END IF;
 
-    -- 5) Update analytical table
+    -- 5) Update analytical table (possibly multiple instances for a painting)
     INSERT INTO PaintData (PaintingID, Year, Artist, Gender, BirthYear, Nationality, Citizenship, Movement, EarliestYearOfMovement, MovementOrigin, Institution, InstitutionLocation, Style, EarliestYearOfStyle, StyleOrigin, TagsOfPainting)
     SELECT  NEW.paintingId AS PaintingID,
             NEW.dateYear AS Year,
@@ -81,11 +81,11 @@ BEGIN
             m.movementName as Movement,
             m.periodStart as EarliestYearOfMovement,
             m.majorLocation as MovementOrigin,
-            GROUP_CONCAT(DISTINCT i.institutionName ORDER BY i.institutionName SEPARATOR ', ') as Institution,
-            GROUP_CONCAT(DISTINCT i.institutionLocation ORDER BY i.institutionLocation SEPARATOR ', ') as InstitutionLocation,
-            GROUP_CONCAT(DISTINCT s.styleName ORDER BY s.styleName SEPARATOR ', ') as Style,
-            MIN(s.firstDate) as EarliestYearOfStyle,
-            GROUP_CONCAT(DISTINCT s.majorLocation ORDER BY s.majorLocation SEPARATOR ', ') as StyleOrigin,
+            i.institutionName as Institution,
+            i.institutionLocation as InstitutionLocation,
+            s.styleName as Style,
+            s.firstDate as EarliestYearOfStyle,
+            s.majorLocation as StyleOrigin,
             NEW.tags as TagsOfPainting
     FROM Paintings p
     LEFT JOIN Artists a ON p.artist_artistId = a.artistId
@@ -94,8 +94,7 @@ BEGIN
     LEFT JOIN Movements m ON a.movementId = m.movementId
     LEFT JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     LEFT JOIN Styles s ON ps.styleId = s.styleId
-    WHERE p.paintingId = NEW.paintingId
-    GROUP BY p.paintingId, a.artistName, a.gender, a.birthYear, a.nationality, a.citizenship, m.movementName, m.periodStart, m.majorLocation, NEW.tags;
+    WHERE p.paintingId = NEW.paintingId;
 END;
 //
 DELIMITER ;
