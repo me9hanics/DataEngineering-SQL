@@ -16,7 +16,8 @@ USE painterpalette;
 
 DROP TABLE IF EXISTS PaintData;
 CREATE TABLE PaintData AS
-SELECT  p.paintingId AS PaintingID, 
+SELECT  p.paintingId AS PaintingID,
+        p.dateYear AS Year,
         a.artistName AS Artist,
         a.gender AS Gender,
         a.birthYear as BirthYear,
