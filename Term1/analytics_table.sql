@@ -12,13 +12,7 @@
 -- Institutions (of painter): names, locations
 -- Styles (of painting): origin locations
 
--- It's better to not have separate instances for a painting per style or artist institution (they can be multiple), hence I store
--- one instance per painting, having the distinct styles and institutions concatenated, separated by commas in the "Institutions" and "Styles" column.
-
 USE painterpalette;
-
-SET SESSION sort_buffer_size = 1024 * 1024 * 16; -- 16MB, MySQL limits this to 256kB by default
-SET SESSION group_concat_max_len = 1024 * 1024 * 16;
 
 DROP TABLE IF EXISTS PaintData;
 CREATE TABLE PaintData AS
@@ -31,10 +25,11 @@ SELECT  p.paintingId AS PaintingID,
         m.movementName as Movement,
         m.periodStart as EarliestYearOfMovement,
         m.majorLocation as MovementOrigin,
-        GROUP_CONCAT(DISTINCT i.institutionName ORDER BY i.institutionName SEPARATOR ', ') as Institutions, -- Institution1, Institution2, ...
-        GROUP_CONCAT(DISTINCT i.institutionLocation ORDER BY i.institutionLocation SEPARATOR ', ') as InstitutionLocations,
-        GROUP_CONCAT(DISTINCT s.styleName ORDER BY s.styleName SEPARATOR ', ') as Styles,
-        GROUP_CONCAT(DISTINCT s.majorLocation ORDER BY s.majorLocation SEPARATOR ', ') as StyleOrigins,
+        i.institutionName as Institution,
+        i.institutionLocation as InstitutionLocation,
+        s.styleName as Style,
+        s.firstDate as EarliestYearOfStyle,
+        s.majorLocation as StyleOrigin,
         p.tags as TagsOfPainting        
 FROM Paintings p
 LEFT JOIN Artists a
@@ -49,8 +44,13 @@ LEFT JOIN PaintingStyles ps
 ON p.paintingId = ps.paintingId
 LEFT JOIN Styles s
 ON ps.styleId = s.styleId
--- Group by everything except institutions and styles, those are used for concatenation above
-GROUP BY p.paintingId, a.artistName, a.gender, a.birthYear, a.nationality, a.citizenship, m.movementName, m.periodStart, m.majorLocation, p.tags
 ORDER BY p.paintingId;
 
-SELECT * FROM PaintData WHERE Styles LIKE "%,%" LIMIT 20;
+SELECT * FROM PaintData LIMIT 20;
+
+-- This is a table that works universally for various queries; but has multiple instances for a painting if it has more than one styles or its artist has multiple institutions.
+
+-- It's more logical to not have separate instances for a painting per style or artist institution, just store one instance per painting and concatenate the information.
+-- In a view I combine instances, with distinct styles and institutions concatenated into one string, separated by commas in the "Institutions" and "Styles" column.
+
+-- This is done in the data_marts_analysis.sql file.
