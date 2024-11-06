@@ -1,6 +1,6 @@
 USE painterpalette;
 
--- ---------------------------- Process when a painting is added to the Paintings table ----------------------------
+-- ---------------------------- New painting added to the Paintings table process ----------------------------
 
 -- Steps:
 -- 1. If the artistName is not null, check if the artist exists. If not, update the Artists table.
@@ -95,6 +95,82 @@ BEGIN
     LEFT JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
     LEFT JOIN Styles s ON ps.styleId = s.styleId
     WHERE p.paintingId = NEW.paintingId;
+END;
+//
+DELIMITER ;
+
+-- ---------------------------- New painter added to the Paintings table process ----------------------------
+
+-- Trigger steps:
+
+-- 1) If movementName is not null, check if the movement exists. If not, add it to the Movements table.
+-- 2) movementId foreign key update
+-- 3) If institutionName is not null, check if the institution exists. If not, add it to the Institutions table.
+-- 4) Update the ArtistInstitutions table
+
+DROP TRIGGER IF EXISTS after_artist_insert;
+DELIMITER //
+CREATE TRIGGER after_artist_insert
+AFTER INSERT ON Artists
+FOR EACH ROW
+BEGIN
+    DECLARE movementId_ INT;
+    DECLARE institutionName_ VARCHAR(255);
+    DECLARE institutionId_ INT;
+
+    IF NEW.movement IS NOT NULL THEN
+        SELECT movementId INTO movementId_
+        FROM Movements
+        WHERE movementName = NEW.movement;
+        
+        -- 1)
+        IF movementId_ IS NULL THEN
+            INSERT INTO Movements (movementName)
+            VALUES (NEW.movement);
+            SET movementId_ = LAST_INSERT_ID();
+        END IF;
+
+        -- 2)
+        UPDATE Artists
+        SET movementId = movementId_
+        WHERE artistId = NEW.artistId;
+    END IF;
+
+    -- Comma-separated institutions
+    IF NEW.paintingSchool IS NOT NULL THEN
+        WHILE LOCATE(',', NEW.paintingSchool) > 0 DO
+            SET institutionName_ = TRIM(SUBSTRING_INDEX(NEW.paintingSchool, ',', 1));
+            SET NEW.paintingSchool = TRIM(SUBSTRING(NEW.paintingSchool FROM LOCATE(',', NEW.paintingSchool) + 1)); -- Remove the first institution from the string
+            
+            SELECT institutionId INTO institutionId_
+            FROM Institutions
+            WHERE institutionName = institutionName_;
+
+            -- 3)
+            IF institutionId_ IS NULL THEN
+                INSERT INTO Institutions (institutionName)
+                VALUES (institutionName_);
+                SET institutionId_ = LAST_INSERT_ID();
+            END IF;
+
+            -- 4)
+            INSERT INTO ArtistInstitutions (artistId, institutionId)
+            VALUES (NEW.artistId, institutionId_);
+        END WHILE;
+
+        -- Handle the last (possibly only) institution
+        SET institutionName_ = TRIM(NEW.paintingSchool);
+        SELECT institutionId INTO institutionId_
+        FROM Institutions
+        WHERE institutionName = institutionName_;
+        IF institutionId_ IS NULL THEN
+            INSERT INTO Institutions (institutionName)
+            VALUES (institutionName_);
+            SET institutionId_ = LAST_INSERT_ID();
+        END IF;
+        INSERT INTO ArtistInstitutions (artistId, institutionId)
+        VALUES (NEW.artistId, institutionId_);
+    END IF;
 END;
 //
 DELIMITER ;
