@@ -16,6 +16,8 @@ BEGIN
     DECLARE artistId_ INT;
     DECLARE styleName_ VARCHAR(255);
     DECLARE styleId_ INT;
+    DECLARE styleCopy VARCHAR(255);
+    SET styleCopy = NEW.style;
 
     -- 1)
     IF NEW.artistName IS NOT NULL THEN
@@ -34,10 +36,10 @@ BEGIN
     END IF;
 
     -- Handle comma-separated styles
-    IF NEW.style IS NOT NULL THEN
-        WHILE LOCATE(',', NEW.style) > 0 DO
-            SET styleName_ = TRIM(SUBSTRING_INDEX(NEW.style, ',', 1));
-            SET NEW.style = TRIM(SUBSTRING(NEW.style FROM LOCATE(',', NEW.style) + 1)); -- Remove the first style from the string
+    IF styleCopy IS NOT NULL THEN
+        WHILE LOCATE(',', styleCopy) > 0 DO
+            SET styleName_ = TRIM(SUBSTRING_INDEX(styleCopy, ',', 1));
+            SET styleCopy = TRIM(SUBSTRING(styleCopy FROM LOCATE(',', styleCopy) + 1)); -- Remove the first style from the string
             
             SELECT styleId INTO styleId_
             FROM Styles
@@ -56,7 +58,7 @@ BEGIN
         END WHILE;
 
         -- Handle the last (possibly only) style, the string after the last (if any) comma
-        SET styleName_ = TRIM(NEW.style);
+        SET styleName_ = TRIM(styleCopy);
         SELECT styleId INTO styleId_
         FROM Styles
         WHERE styleName = styleName_;
@@ -117,6 +119,8 @@ BEGIN
     DECLARE movementId_ INT;
     DECLARE institutionName_ VARCHAR(255);
     DECLARE institutionId_ INT;
+    DECLARE paintingSchoolCopy VARCHAR(255);
+    SET paintingSchoolCopy = NEW.paintingSchool;
 
     IF NEW.movement IS NOT NULL THEN
         SELECT movementId INTO movementId_
@@ -137,10 +141,10 @@ BEGIN
     END IF;
 
     -- Comma-separated institutions
-    IF NEW.paintingSchool IS NOT NULL THEN
-        WHILE LOCATE(',', NEW.paintingSchool) > 0 DO
-            SET institutionName_ = TRIM(SUBSTRING_INDEX(NEW.paintingSchool, ',', 1));
-            SET NEW.paintingSchool = TRIM(SUBSTRING(NEW.paintingSchool FROM LOCATE(',', NEW.paintingSchool) + 1)); -- Remove the first institution from the string
+    IF paintingSchoolCopy IS NOT NULL THEN
+        WHILE LOCATE(',', paintingSchoolCopy) > 0 DO
+            SET institutionName_ = TRIM(SUBSTRING_INDEX(paintingSchoolCopy, ',', 1));
+            SET paintingSchoolCopy = TRIM(SUBSTRING(paintingSchoolCopy FROM LOCATE(',', paintingSchoolCopy) + 1)); -- Remove the first institution from the string
             
             SELECT institutionId INTO institutionId_
             FROM Institutions
@@ -159,7 +163,7 @@ BEGIN
         END WHILE;
 
         -- Handle the last (possibly only) institution
-        SET institutionName_ = TRIM(NEW.paintingSchool);
+        SET institutionName_ = TRIM(paintingSchoolCopy);
         SELECT institutionId INTO institutionId_
         FROM Institutions
         WHERE institutionName = institutionName_;
