@@ -14,12 +14,12 @@ In order to answer such questions, we need to create and for future purposes mai
 
 ## Technical details
 
+**To run the project, after cloning, in the `operational_layer_data_processing.sql` file change the paths for each imported CSV file!** Unfortunately MySQL doesn't support variables in the `LOAD DATA INFILE` command, nor does it support `LOAD DATA` inside stored procedures, and relative paths are relative to the .exe not the script, so the paths were "hardcoded".<br>
+**The painting datasets are large, make sure to have a high enough threshold for MySQL timeouts when loading them! (Can be easily set, 60secs worked well for me.)**
+
 The collected datasets are stored in the following CSV files: `artists.csv` for painters, `paintings_art500k.csv` and `paintings_wikiart.csv` for paintings.<br>
 From these, I derived also tables for institutions, movements (one per artist) and styles (of paintings, a painting can have multiple styles even).<br>
 To add extra information to the institution, movement and style tables, I added location information from the file `institutions_origins.csv`, `movements_origins.csv` and `styles_origins.csv` files. (These include an instance for each institution/movement/style, and the origin location of it, "predicted" by Generative AI (using Python) to have broader information.)
-
-**To run the project, after cloning, in the `operational_layer_data_processing.sql` file change the paths for each imported CSV file!** Unfortunately MySQL doesn't support variables in the `LOAD DATA INFILE` command, nor does it support `LOAD DATA` inside stored procedures, and relative paths are relative to the .exe not the script, so the paths were "hardcoded".<br>
-**The painting datasets are large, make sure to have a high enough threshold for MySQL timeouts! (Can be easily set, 60secs worked well for me.)**
 
 The files should be ran in the following order: **`operational_layer_data_processing.sql`**, **`analytics_table.sql`**, **`pipeline.sql`**, **`data_marts.sql`**.
 
@@ -27,7 +27,7 @@ The files should be ran in the following order: **`operational_layer_data_proces
 
 After importing a table of painters, importing 2 painting datasets and combining them into one table, and deriving tables for institutions, movements and styles from the data of painters and paintings, enriched with external information (of locations), the database took up the following structure:
 
-![ER Diagram](/imgs/diagram.png)
+![ER Diagram](imgs/diagram.png)
 
 Every painter has one movement (which can have multiple painters), and every painting has one painter (who can have multiple paintings).<br>
 However, painting-style and painting-institution relations are many-to-many; to deal with this an inbetween table is creating for each of these relations.<br>
@@ -56,14 +56,22 @@ The paintings datasets also include notable information about the artists, but m
 To find connections between institutions and styles, or movements and styles, we can aggregate data through paintings, connecting the styles, movements and institutions to the paintings directly or indirectly. It suffices to create an **analytical table** for all sorts of queries, that stores instances of painting-style-painter-institution-movement relations with all relevant columns.<br>
 The `analytics_table.sql` file has the implementation of such a table. A sample of it:
 
-![Analytics table](/imgs/analytics_table.png)
+![Analytics table](imgs/analytics_table.png)
 
 Specifically, for viewing the movement-style and institution-style relations, we can create **data marts (views in MySQL)** that store the specific queries for the subset of the data we need for these questions (e.g. movement-style pairs with counts, ordered in decreasing count). Those are implemented in the `data_marts_analytics.sql` file.
 
-The project needs to be designed to handle newly added painting data (to the Paintings table) for analytics. To continuously update our analytical table when a new painting is added, we need to create an **ETL pipeline**. This is done in the `pipeline.sql`, when a new painting is added, on a trigger the ETL pipeline firstly updates the tables of the relational database, and then updates the analytical table.<br>
-This way, we keep the analytical table up-to-date.<br>
+The project needs to be designed to handle newly added painting data (to the Paintings table) for analytics. To continuously update our analytical table when a new painting is added, we need to create an **ETL pipeline**. This is done in the `pipeline.sql`, when a new painting is added, on a trigger the ETL pipeline firstly updates the tables of the relational database, and then updates the analytical table. We also trigger on updates of the artist table, updating the movements and artist-institutions tables if needed, but in this case we do not to update the analytical table. (Ideally, for every table update e.g. updating the institutions table, we'd refresh any instance with that institution in the analytics table, but that is out of scope now.)<br>
+With the ETL pipeline we keep the analytical table up-to-date.<br>
 (Side note: if I were to use Materialized Views instead of simple Views for the data marts, as they are physical copies I would need to update them too, at least periodically.)<br>
 Extraction is done by triggering the pipeline when a new painting is added, transformation is done by updating the tables of the relational database, and loading is done by updating the analytical table.
+
+The steps of the ETL pipeline upon painting addition:
+
+- 1. If the artistName is not null, check if the artist exists. If not, update the Artists table.
+- 2. Foreign key update (Paintings table)
+- 3. Add the styles if needed to the Styles table
+- 4. Update the PaintingStyles table
+- 5. Add the new instance into the analytical table
 
 ## Separate files/layers
 
