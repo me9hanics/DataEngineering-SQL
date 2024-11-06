@@ -11,8 +11,7 @@ USE painterpalette;
 
 DROP TRIGGER IF EXISTS after_painting_insert;
 DELIMITER //
-CREATE TRIGGER after_painting_insert
-    AFTER INSERT ON Paintings FOR EACH ROW
+CREATE TRIGGER after_painting_insert AFTER INSERT ON Paintings FOR EACH ROW
 BEGIN
     DECLARE artistId_ INT;
     DECLARE styleName_ VARCHAR(255);
@@ -25,12 +24,12 @@ BEGIN
             -- Add artist
             INSERT INTO Artists (artistName, nationality)
             VALUES (NEW.artistName, NEW.nationality);
-            SET artistId = LAST_INSERT_ID();
+            SET artistId_ = LAST_INSERT_ID();
         END IF;
 
         -- 2)
         UPDATE Paintings
-        SET artist_artistId = artistId
+        SET artist_artistId = artistId_
         WHERE paintingId = NEW.paintingId;
     END IF;
 
@@ -38,7 +37,7 @@ BEGIN
     IF NEW.style IS NOT NULL THEN
         WHILE LOCATE(',', NEW.style) > 0 DO
             SET styleName_ = TRIM(SUBSTRING_INDEX(NEW.style, ',', 1));
-            SET NEW.style = TRIM(SUBSTRING(NEW.style FROM LOCATE(',', NEW.style) + 1)); -- We remove the first style from the string
+            SET NEW.style = TRIM(SUBSTRING(NEW.style FROM LOCATE(',', NEW.style) + 1)); -- Remove the first style from the string
             
             SELECT styleId INTO styleId_
             FROM Styles
@@ -48,14 +47,15 @@ BEGIN
             IF styleId_ IS NULL THEN
                 INSERT INTO Styles (styleName)
                 VALUES (styleName_);
-                SET styleId = LAST_INSERT_ID();
+                SET styleId_ = LAST_INSERT_ID();
             END IF;
-            --4)
+
+            -- 4)
             INSERT INTO PaintingStyles (paintingId, styleId)
             VALUES (NEW.paintingId, styleId_);
         END WHILE;
-        -- One last (possibly the only) style, after the last comma
 
+        -- Handle the last (possibly only) style, the string after the last (if any) comma
         SET styleName_ = TRIM(NEW.style);
         SELECT styleId INTO styleId_
         FROM Styles
@@ -63,11 +63,39 @@ BEGIN
         IF styleId_ IS NULL THEN
             INSERT INTO Styles (styleName)
             VALUES (styleName_);
-            SET styleId = LAST_INSERT_ID();
+            SET styleId_ = LAST_INSERT_ID();
         END IF;
         INSERT INTO PaintingStyles (paintingId, styleId)
         VALUES (NEW.paintingId, styleId_);
     END IF;
+
+    -- 5) Update analytical table
+    INSERT INTO PaintData (PaintingID, Year, Artist, Gender, BirthYear, Nationality, Citizenship, Movement, EarliestYearOfMovement, MovementOrigin, Institution, InstitutionLocation, Style, EarliestYearOfStyle, StyleOrigin, TagsOfPainting)
+    SELECT  NEW.paintingId AS PaintingID,
+            NEW.dateYear AS Year,
+            a.artistName AS Artist,
+            a.gender AS Gender,
+            a.birthYear as BirthYear,
+            a.nationality as Nationality,
+            a.citizenship as Citizenship,
+            m.movementName as Movement,
+            m.periodStart as EarliestYearOfMovement,
+            m.majorLocation as MovementOrigin,
+            GROUP_CONCAT(DISTINCT i.institutionName ORDER BY i.institutionName SEPARATOR ', ') as Institution,
+            GROUP_CONCAT(DISTINCT i.institutionLocation ORDER BY i.institutionLocation SEPARATOR ', ') as InstitutionLocation,
+            GROUP_CONCAT(DISTINCT s.styleName ORDER BY s.styleName SEPARATOR ', ') as Style,
+            MIN(s.firstDate) as EarliestYearOfStyle,
+            GROUP_CONCAT(DISTINCT s.majorLocation ORDER BY s.majorLocation SEPARATOR ', ') as StyleOrigin,
+            NEW.tags as TagsOfPainting
+    FROM Paintings p
+    LEFT JOIN Artists a ON p.artist_artistId = a.artistId
+    LEFT JOIN ArtistInstitutions ai ON a.artistId = ai.artistId
+    LEFT JOIN Institutions i ON ai.institutionId = i.institutionId
+    LEFT JOIN Movements m ON a.movementId = m.movementId
+    LEFT JOIN PaintingStyles ps ON p.paintingId = ps.paintingId
+    LEFT JOIN Styles s ON ps.styleId = s.styleId
+    WHERE p.paintingId = NEW.paintingId
+    GROUP BY p.paintingId, a.artistName, a.gender, a.birthYear, a.nationality, a.citizenship, m.movementName, m.periodStart, m.majorLocation, NEW.tags;
 END;
 //
 DELIMITER ;
