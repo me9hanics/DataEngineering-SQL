@@ -205,22 +205,20 @@ END;
 DELIMITER ;
 
 -- Test the triggers
-SELECT * FROM Artists ORDER BY artistId DESC LIMIT 5;
 INSERT INTO Artists (artistName, movement, birthYear, paintingSchool)
 VALUES ('Test Artist', 'Test Movement', 1990, 'Test Institution, St Ives School');
 
+INSERT INTO Paintings (artistName, dateYear, style, tags)
+VALUES ('Test Artist', 1920, 'teststyle', '[test, impressionism]');
+
+INSERT INTO Paintings (artistName, dateYear, style, tags, nationality, movement, paintingSchool)
+VALUES ('Test Artist2', 1900, 'Surrealism, Art Deco, teststyle', '[basic text]', "Czech", "NewMovementFromPaintingInstance", "NewInstitutionFromPaintingInstance");
+
 SELECT * FROM Artists ORDER BY artistId DESC LIMIT 5;
+SELECT * FROM Paintings ORDER BY paintingId DESC LIMIT 5;
+SELECT * FROM PaintData ORDER BY PaintingID DESC LIMIT 5;
 SELECT * FROM Movements ORDER BY movementId DESC LIMIT 5;
 SELECT * FROM Institutions ORDER BY institutionId DESC LIMIT 5;
-SELECT * FROM ArtistInstitutions ORDER BY artistId DESC LIMIT 5;
-SELECT * FROM paintingstyles ORDER BY paintingId DESC LIMIT 5;
-
--- Test the trigger
-SELECT * FROM Paintings ORDER BY paintingId DESC LIMIT 5;
-INSERT INTO Paintings (artistName, dateYear, style, tags)
-VALUES ('Test Artist2', 1900, 'Surrealism, Art Deco, teststyle', '[test, impressionism]');
-
-SELECT * FROM Paintings ORDER BY paintingId DESC LIMIT 5;
 SELECT * FROM Styles ORDER BY styleId DESC LIMIT 5;
+SELECT * FROM ArtistInstitutions ORDER BY artistId DESC LIMIT 5;
 SELECT * FROM PaintingStyles ORDER BY paintingId DESC LIMIT 5;
-SELECT * FROM PaintData ORDER BY PaintingID DESC LIMIT 5;
