@@ -1,7 +1,7 @@
 drop schema IF EXISTS painterpalette;
 create schema painterpalette;
 USE painterpalette;
--- Paths: The base directory is the root, C:/GitHubRepo/DataEngineering-SQL/, datasets are in the datasets subfolder.
+-- Paths: The base directory is the root, C:/GitHubRepo/DataEngineering-SQL/Term1/, datasets are in the datasets subfolder.
 -- Change the base directory in each path!!!
 -- Wrote a stored procedure for loading data, but MySQL among many things doesn't allow LOAD DATA INFILE in stored procedures
 -- (It's also not possible to use variables in LOAD DATA INFILE statements, so I cannot just have variables at the top of the script that each user can change).
@@ -50,7 +50,7 @@ CREATE TABLE Artists (
   INDEX idx_artists_artistName (artistName)
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/artists.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/artists.csv'
 INTO TABLE Artists
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS WikiartPaintings (
   tags TEXT
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_wikiart.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/paintings_wikiart.csv'
 INTO TABLE WikiartPaintings
 FIELDS TERMINATED BY ','  
 OPTIONALLY ENCLOSED BY '"' 
@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS Art500kPaintings (
   friendsAndCoworkers VARCHAR(255)
 );
 
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/paintings_art500k.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/paintings_art500k.csv'
 INTO TABLE Art500kPaintings
 FIELDS TERMINATED BY ','
 OPTIONALLY ENCLOSED BY '"'
@@ -350,7 +350,7 @@ CREATE TABLE temp_styles_locations (
     styleName VARCHAR(255),
     originCountry VARCHAR(255)
 );
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/styles_origins.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/styles_origins.csv'
 INTO TABLE temp_styles_locations
 FIELDS TERMINATED BY ',' 
 optionally ENCLOSED BY '"'
@@ -407,7 +407,7 @@ CREATE TABLE temp_movements_locations (
     movementName VARCHAR(255),
     originCountry VARCHAR(255)
 );
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/movements_origins.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/movements_origins.csv'
 INTO TABLE temp_movements_locations
 FIELDS TERMINATED BY ','
 optionally ENCLOSED BY '"'
@@ -431,7 +431,7 @@ CREATE TABLE temp_institutions_locations (
     institutionName VARCHAR(255),
     institutionLocation VARCHAR(255)
 );
-LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/datasets/institutions_origins.csv'
+LOAD DATA INFILE 'C:/GitHubRepo/DataEngineering-SQL/Term1/datasets/institutions_origins.csv'
 INTO TABLE temp_institutions_locations
 FIELDS TERMINATED BY ','
 optionally ENCLOSED BY '"'
