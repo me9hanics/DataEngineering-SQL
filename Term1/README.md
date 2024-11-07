@@ -27,7 +27,9 @@ The files should be ran in the following order: **`operational_layer_data_proces
 
 After importing a table of painters, importing 2 painting datasets and combining them into one table, and deriving tables for institutions, movements and styles from the data of painters and paintings, enriched with external information (of locations), the database took up the following structure:
 
-![ER Diagram](imgs/diagram.png)
+<div align="center">
+    <img src="imgs/diagram.png" alt="ER Diagram" style="width:60%;">
+</div>
 
 Every painter has one movement (which can have multiple painters), and every painting has one painter (who can have multiple paintings).<br>
 However, painting-style and painting-institution relations are many-to-many; to deal with this an inbetween table is creating for each of these relations.<br>
@@ -108,7 +110,7 @@ Because many paintings do not have a painter (stored in our database), and many 
     - **AFTER INSERT Trigger**:
         3. Add the styles if needed to the `Styles` table.
         4. Update `PaintingStyles`.
-        5. Update the analytical table with the new instance(s)
+        5. Update the analytical table with the new instance(s).
 
 2. **New painter added to the Artists table**:
     - **BEFORE INSERT Trigger** (as table modification is only allowed in before triggers):
