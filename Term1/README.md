@@ -73,6 +73,9 @@ The steps of the ETL pipeline upon painting addition:
 - 4. Update the PaintingStyles table
 - 5. Add the new instance into the analytical table
 
+The first two steps require updating the table that we trigger on when being updated, and that can only be done with BEFORE triggers (otherwise there would be an infinite loop). The last three steps are done in the AFTER trigger.<br>
+The steps of adding a new artist are similar, but there is no 5th step as the analytical table does not change.
+
 ## Separate files/layers
 
 The separate files/layers are as follows, and should be ran in the following order:
@@ -96,10 +99,31 @@ This results in the diagram seen above.
 
 Because many paintings do not have a painter (stored in our database), and many painters have no institution, etc. and each (foreign key) relation is allowed to be `Null`, I use left joins for joining tables to create the analytical table. This way all instances of paintings are included.<br>
 
+**`pipeline.sql`**: The "ETL pipeline" layer, contains the creation of triggers for updating the analytical table when a new painting is added, and for updating the movements and artist-institutions tables when a new artist is added. The triggers are created on the `Paintings` and `Artists` tables, respectively. The triggers are implemented as follows:
+
+1. **New painting added to the Paintings table**:
+    - **BEFORE INSERT Trigger** (as table modification is only allowed in before triggers):
+        1. If the `artistName` is not null, check if the artist exists. If not, update the `Artists` table.
+        2. Foreign key update (Paintings table).
+    - **AFTER INSERT Trigger**:
+        3. Add the styles if needed to the `Styles` table.
+        4. Update `PaintingStyles`.
+        5. Update the analytical table with the new instance(s)
+
+2. **New painter added to the Artists table**:
+    - **BEFORE INSERT Trigger** (as table modification is only allowed in before triggers):
+        1. If `movementName` is not null, check if the movement exists. If not, add it to the `Movements` table.
+        2. Update the `movementId` foreign key.
+    - **AFTER INSERT Trigger**:
+        3. If `institutionName` is not null, check if the institution exists. If not, add it to the `Institutions` table.
+        4. Update the `ArtistInstitutions` table.
+        (No need to update the analytical table as a 5th step, as no painting is added.)
+
 **`data_marts_analytics.sql`**: The "data mart" layer. Building on the analytical table, contains the creation of views for specific queries:
 
 - the most common styles per institution
-- the most common movements per style and vica versa, sorted by, the most common styles per movement, etc. 
+- the most common movements per style and vica versa, sorted by, the most common styles per movement, etc.
+- painters with the most paintings, movements with the least paintings
 
 These are created as views, simultating data marts, and can be updated with new data by running the queries again. Views in MySQL are unmaterialized, which allow for efficiently querying, without duplicating the data, unlike materialized views. (Materialized views are not implemented in this project.)
 
