@@ -1,5 +1,5 @@
-# Painter coexhibition network analytics in Neo4j (and KNIME)
+# Painter coexhibition network analytics with Neo4j and KNIME
 
 Pipeline:
 
-![Pipeline](workflow.svg)
+![Pipeline](imgs/workflow/workflow_demo.svg)
